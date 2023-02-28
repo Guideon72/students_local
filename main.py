@@ -2,7 +2,7 @@ import sys
 import sqlite3
 from pathlib import Path
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -14,27 +14,37 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QLineEdit,
     QPushButton,
+    QToolBar,
+    QStatusBar,
 )
 
 
+# Create a Main Window; required for any PyQt app
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Student Mangement System")
-        self.setFixedHeight(400)
-        self.setFixedWidth(425)
+        self.setMinimumSize(640, 480)
 
-        # Build menu bar options
+        # Create file path objects for db and icons
+        basepath = Path(Path(__file__).parent)
+        self.db_path = Path(basepath / "data" / "database.db")
+        add_icon_path = Path(basepath / "icons" / "add.png")
+        search_icon_path = Path(basepath / "icons" / "search.png")
+
+        # Add File/Add Student menu item to the menu bar
         file_menu_item = self.menuBar().addMenu("&File")
-        add_student_action = QAction("Add Student", self)
+        add_student_action = QAction(QIcon(str(add_icon_path)), "Add Student", self)
         add_student_action.triggered.connect(self.insert_student)
         file_menu_item.addAction(add_student_action)
 
+        # Add Edit/Search file menu items to the menu bar
         edit_menu_item = self.menuBar().addMenu("&Edit")
-        find_student_action = QAction("Search", self)
+        find_student_action = QAction(QIcon(str(search_icon_path)), "Search", self)
         find_student_action.triggered.connect(self.find_student)
         edit_menu_item.addAction(find_student_action)
 
+        # Add Help file menu item to the menu bar
         help_menu_item = self.menuBar().addMenu("&Help")
         help = QAction("Get Help", self)
         help_menu_item.addAction(help)
@@ -47,6 +57,22 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.table)
         self.load_data()
 
+        # Add and configure a Toolbar
+        toolbar = QToolBar()
+        toolbar.setMovable(True)
+        self.addToolBar(toolbar)
+
+        toolbar.addAction(add_student_action)
+        toolbar.addAction(find_student_action)
+
+        # Add and configure a Status Bar
+        self.statusbar = QStatusBar()
+        self.setStatusBar(self.statusbar)
+
+        # Add buttons to status bar when a table item is selected
+        self.table.cellClicked.connect(self.cell_clicked)
+
+    # Load/reload the table data from our database
     def load_data(self):
         base = Path(__file__).parent / "data"
         db_path = Path(base / "database.db")
@@ -59,23 +85,55 @@ class MainWindow(QMainWindow):
                 self.table.setItem(row_num, col_num, QTableWidgetItem(str(data)))
         connection.close()
 
+    # Trigger the add student dialog box
     def insert_student(self):
-        dialog = InsertDialog(self.load_data)
+        dialog = InsertDialog(self.load_data, self.db_path)
         dialog.exec()
 
+    # Trigger the student search dialog box
     def find_student(self):
-        dialog = FindDialog(self.table)
+        dialog = FindDialog(self.table, self.db_path)
         dialog.exec()
 
+    def cell_clicked(self):
+        # Prevent buttons from duplicating each time
+        children = self.findChildren(QPushButton)
+        if children:
+            for child in children:
+                self.statusbar.removeWidget(child)
+        # Set up Edit button to show when clicking a cell
+        edit_button = QPushButton("Edit Record")
+        edit_button.clicked.connect(self.edit)
 
+        # Set up Delete button to show when clicking a cell
+        delete_button = QPushButton("Delete Record")
+        delete_button.clicked.connect(self.delete)
+
+        self.statusbar.addWidget(edit_button)
+        self.statusbar.addWidget(delete_button)
+
+    def edit(self):
+        edit_dialog = EditDialog(self.load_data, self.table, self.db_path)
+        edit_dialog.exec()
+
+    def delete(self):
+        delete_dialog = DeleteDialog()
+        delete_dialog.exec()
+
+
+# Create a dialog window for adding students to our database
 class InsertDialog(QDialog):
-    def __init__(self, reload):
+    def __init__(self, reload, db):
         super().__init__()
         self.setWindowTitle("Insert Student Record")
         self.setFixedWidth(300)
         self.setFixedHeight(300)
 
+        # Implement the load_data function from the /
+        # target MainWindow object in order to refresh data later
         self.load_data = reload
+
+        self.db = db
 
         layout = QVBoxLayout()
 
@@ -110,9 +168,7 @@ class InsertDialog(QDialog):
         self.setLayout(layout)
 
     def add_student(self):
-        base = Path(__file__).parent / "data"
-        db_path = Path(base / "database.db")
-        connection = sqlite3.connect(db_path)
+        connection = sqlite3.connect(self.db)
 
         name = self.stdnt_edit_line.text()
         course = self.class_name.itemText(self.class_name.currentIndex())
@@ -133,10 +189,12 @@ class InsertDialog(QDialog):
         self.close()
 
 
+# Create a dialog window for searching our database for any students with a given name
 class FindDialog(QDialog):
-    def __init__(self, mwtable):
+    def __init__(self, mwtable, db):
         super().__init__()
         self.search_table = mwtable
+        self.db = db
 
         self.setWindowTitle("Find Student Record")
         self.setFixedWidth(300)
@@ -160,19 +218,18 @@ class FindDialog(QDialog):
         self.setLayout(layout)
 
     def find_student(self):
-        base = Path(__file__).parent / "data"
-        db_path = Path(base / "database.db")
-        connection = sqlite3.connect(db_path)
+        connection = sqlite3.connect(self.db)
         curs = connection.cursor()
 
         name = self.stdnt_search_line.text()
 
-        results = curs.execute("SELECT * FROM students WHERE name = ?", (name,))
-        rows = list(results)
-        # print(rows)
-        items = self.search_table.findItems(name, Qt.MatchFlag.MatchFixedString)
+        # Locate all records in table that match the query paramaters
+        items = self.search_table.findItems(name, Qt.MatchFlag.MatchStartsWith)
+
         # clear current selection.
         self.search_table.setCurrentItem(None)
+
+        # Identify each valid result and higlighting
         for item in items:
             # print(item.text())
             self.search_table.item(item.row(), 1).setSelected(True)
@@ -180,6 +237,83 @@ class FindDialog(QDialog):
         curs.close()
         connection.close()
         self.close()
+
+
+class EditDialog(QDialog):
+    def __init__(self, reload, table, db):
+        super().__init__()
+        self.setWindowTitle("Update Student Record")
+        self.setFixedWidth(300)
+        self.setFixedHeight(300)
+
+        # Implement the load_data function from the /
+        # target MainWindow object in order to refresh data later
+        self.load_data = reload
+
+        self.mw_table = table
+        self.db = db
+
+        # Get the line index for the currently selected row
+        idx = self.mw_table.currentRow()
+        self.student_id = self.mw_table.item(idx, 0).text()
+        student_name = self.mw_table.item(idx, 1).text()
+        course_name = self.mw_table.item(idx, 2).text()
+        mobile_num = self.mw_table.item(idx, 3).text()
+
+        layout = QVBoxLayout()
+
+        # Set up student name field
+        stdnt_name = QLabel("Name")
+        self.stdnt_edit_line = QLineEdit(student_name)
+        layout.addWidget(stdnt_name)
+        layout.addWidget(self.stdnt_edit_line)
+
+        # Setup class name combo box
+
+        class_name = QLabel("Class")
+        self.class_name = QComboBox()
+        courses = ["Biology", "Math", "Astronomy", "Physics"]
+        self.class_name.addItems(courses)
+        self.class_name.setCurrentText(course_name)
+        layout.addWidget(class_name)
+        layout.addWidget(self.class_name)
+
+        # Set up student mobile number field
+        phone_num = QLabel("Phone")
+        self.phone_edit_line = QLineEdit(mobile_num)
+        self.phone_edit_line.setPlaceholderText("Mobile number")
+        layout.addWidget(phone_num)
+        layout.addWidget(self.phone_edit_line)
+
+        # Set up the Submit button
+        submit = QPushButton("Update Student Record")
+        submit.clicked.connect(self.update_student)
+        layout.addWidget(submit)
+
+        # Displays the layout
+        self.setLayout(layout)
+
+    def update_student(self):
+        connection = sqlite3.connect(self.db)
+        curs = connection.cursor()
+        curs.execute(
+            "UPDATE students SET name = ?, course = ?, mobile = ? WHERE id = ?",
+            (
+                self.stdnt_edit_line.text(),
+                self.class_name.itemText(self.class_name.currentIndex()),
+                self.phone_edit_line.text(),
+                self.student_id,
+            ),
+        )
+        connection.commit()
+        curs.close()
+        connection.close()
+        self.load_data()
+        self.close()
+
+
+class DeleteDialog(QDialog):
+    pass
 
 
 def main():
