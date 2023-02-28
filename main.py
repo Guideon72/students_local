@@ -54,16 +54,18 @@ class MainWindow(QMainWindow):
         connection.close()
 
     def insert_student(self):
-        dialog = InsertDialog()
+        dialog = InsertDialog(self.load_data)
         dialog.exec()
 
 
 class InsertDialog(QDialog):
-    def __init__(self):
+    def __init__(self, reload):
         super().__init__()
         self.setWindowTitle("Insert Student Record")
         self.setFixedWidth(300)
         self.setFixedHeight(300)
+
+        self.load_data = reload
 
         layout = QVBoxLayout()
 
@@ -114,6 +116,8 @@ class InsertDialog(QDialog):
         connection.commit()
         curs.close()
         connection.close()
+        self.load_data()
+        self.close()
 
 
 def main():
