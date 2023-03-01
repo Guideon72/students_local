@@ -40,7 +40,7 @@ class MainWindow(QMainWindow):
 
         # Create file path objects for db and icons
         basepath = Path(Path(__file__).parent)
-        self.db_path = Path(basepath / "data" / "database.db")
+        self.db_path = Path(basepath / "dat" / "database.db")
         add_icon_path = Path(basepath / "icons" / "add.png")
         search_icon_path = Path(basepath / "icons" / "search.png")
 
@@ -87,15 +87,19 @@ class MainWindow(QMainWindow):
 
     # Load/reload the table data from our database
     def load_data(self):
-        connection = DatabaseConnection(self.db_path).connect()
-        results = connection.execute("SELECT * FROM students")
+        try:
+            connection = DatabaseConnection(self.db_path).connect()
+            results = connection.execute("SELECT * FROM students")
 
-        self.table.setRowCount(0)  # prevents duplicating data
-        for row_num, student in enumerate(results):
-            self.table.insertRow(row_num)
-            for col_num, data in enumerate(student):
-                self.table.setItem(row_num, col_num, QTableWidgetItem(str(data)))
-        connection.close()
+            self.table.setRowCount(0)  # prevents duplicating data
+            for row_num, student in enumerate(results):
+                self.table.insertRow(row_num)
+                for col_num, data in enumerate(student):
+                    self.table.setItem(row_num, col_num, QTableWidgetItem(str(data)))
+            connection.close()
+        except sqlite3.OperationalError:
+            print("Invalid database passed in")
+            sys.exit()
 
     # Trigger the add student dialog box
     def insert_student(self):
