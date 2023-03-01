@@ -40,7 +40,7 @@ class MainWindow(QMainWindow):
 
         # Create file path objects for db and icons
         basepath = Path(Path(__file__).parent)
-        self.db_path = Path(basepath / "dat" / "database.db")
+        self.db_path = Path(basepath / "data" / "database.db")
         add_icon_path = Path(basepath / "icons" / "add.png")
         search_icon_path = Path(basepath / "icons" / "search.png")
 
