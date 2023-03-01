@@ -11,12 +11,24 @@ from PyQt6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QGridLayout,
     QComboBox,
     QLineEdit,
     QPushButton,
     QToolBar,
     QStatusBar,
+    QMessageBox,
 )
+
+
+class DatabaseConnection:
+    def __init__(self, database_file):
+        self.base = Path(__file__).parent / "data"
+        self.db_path = Path(self.base / database_file)
+
+    def connect(self):
+        db_connection = sqlite3.connect(self.db_path)
+        return db_connection
 
 
 # Create a Main Window; required for any PyQt app
@@ -46,8 +58,9 @@ class MainWindow(QMainWindow):
 
         # Add Help file menu item to the menu bar
         help_menu_item = self.menuBar().addMenu("&Help")
-        help = QAction("Get Help", self)
-        help_menu_item.addAction(help)
+        get_help_action = QAction("About", self)
+        get_help_action.triggered.connect(self.about)
+        help_menu_item.addAction(get_help_action)
 
         # Build table for student data display
         self.table = QTableWidget()
@@ -74,10 +87,9 @@ class MainWindow(QMainWindow):
 
     # Load/reload the table data from our database
     def load_data(self):
-        base = Path(__file__).parent / "data"
-        db_path = Path(base / "database.db")
-        connection = sqlite3.connect(db_path)
+        connection = DatabaseConnection(self.db_path).connect()
         results = connection.execute("SELECT * FROM students")
+
         self.table.setRowCount(0)  # prevents duplicating data
         for row_num, student in enumerate(results):
             self.table.insertRow(row_num)
@@ -117,8 +129,12 @@ class MainWindow(QMainWindow):
         edit_dialog.exec()
 
     def delete(self):
-        delete_dialog = DeleteDialog()
+        delete_dialog = DeleteDialog(self.load_data, self.table, self.db_path)
         delete_dialog.exec()
+
+    def about(self):
+        about_dialog = AboutDialog()
+        about_dialog.exec()
 
 
 # Create a dialog window for adding students to our database
@@ -168,7 +184,7 @@ class InsertDialog(QDialog):
         self.setLayout(layout)
 
     def add_student(self):
-        connection = sqlite3.connect(self.db)
+        connection = DatabaseConnection(self.db).connect()
 
         name = self.stdnt_edit_line.text()
         course = self.class_name.itemText(self.class_name.currentIndex())
@@ -218,7 +234,7 @@ class FindDialog(QDialog):
         self.setLayout(layout)
 
     def find_student(self):
-        connection = sqlite3.connect(self.db)
+        connection = DatabaseConnection(self.db).connect()
         curs = connection.cursor()
 
         name = self.stdnt_search_line.text()
@@ -294,7 +310,7 @@ class EditDialog(QDialog):
         self.setLayout(layout)
 
     def update_student(self):
-        connection = sqlite3.connect(self.db)
+        connection = DatabaseConnection(self.db).connect()
         curs = connection.cursor()
         curs.execute(
             "UPDATE students SET name = ?, course = ?, mobile = ? WHERE id = ?",
@@ -313,7 +329,71 @@ class EditDialog(QDialog):
 
 
 class DeleteDialog(QDialog):
-    pass
+    def __init__(self, reload, table, db):
+        super().__init__()
+        self.setWindowTitle("Delete Student Record")
+        self.setFixedWidth(300)
+        self.setFixedHeight(300)
+
+        self.reload = reload
+        self.db = db
+
+        self.mw_table = table
+
+        layout = QGridLayout()
+
+        # Set up the Submit button
+        msg = QLabel("Are you sure you want to delete this record?")
+
+        confirmation = QPushButton("Yes")
+        confirmation.clicked.connect(self.delete_record)
+
+        cancel_action = QPushButton("No")
+        cancel_action.clicked.connect(self.close)
+
+        layout.addWidget(msg, 0, 0, 1, 2)
+        layout.addWidget(confirmation, 1, 0)
+        layout.addWidget(cancel_action, 1, 1)
+
+        # Displays the layout
+        self.setLayout(layout)
+
+    def delete_record(self):
+        # Get the line index and student ID for the currently selected row
+        idx = self.mw_table.currentRow()
+        student_id = self.mw_table.item(idx, 0).text()
+
+        # connection = sqlite3.connect(self.db)
+        connection = DatabaseConnection(self.db).connect()
+        curs = connection.cursor()
+        curs.execute(
+            "DELETE FROM students WHERE id = ?",
+            (student_id,),
+        )
+        connection.commit()
+        curs.close()
+        connection.close()
+        self.reload()
+        self.close()
+
+        # Add succes message box
+        success_widget = QMessageBox()
+        success_widget.setWindowTitle("Success")
+        success_widget.setText("Record was deleted successfully.")
+        success_widget.exec()
+
+
+class AboutDialog(QMessageBox):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("About")
+        content = """
+        Written as part of The Python MegaCourse from Ardit Sulce.
+        Feel free to modify and reuse this app for your own learning.
+        Written by Eric Snyder
+        2023
+        """
+        self.setText(content)
 
 
 def main():
