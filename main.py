@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
 )
 
 
-class DatabaseConnection:
+class LocalDatabaseConnection:
     def __init__(self, database_file):
         self.base = Path(__file__).parent / "data"
         self.db_path = Path(self.base / database_file)
@@ -88,7 +88,7 @@ class MainWindow(QMainWindow):
     # Load/reload the table data from our database
     def load_data(self):
         try:
-            connection = DatabaseConnection(self.db_path).connect()
+            connection = LocalDatabaseConnection(self.db_path).connect()
             results = connection.execute("SELECT * FROM students")
 
             self.table.setRowCount(0)  # prevents duplicating data
@@ -188,7 +188,7 @@ class InsertDialog(QDialog):
         self.setLayout(layout)
 
     def add_student(self):
-        connection = DatabaseConnection(self.db).connect()
+        connection = LocalDatabaseConnection(self.db).connect()
 
         name = self.stdnt_edit_line.text()
         course = self.class_name.itemText(self.class_name.currentIndex())
@@ -238,7 +238,7 @@ class FindDialog(QDialog):
         self.setLayout(layout)
 
     def find_student(self):
-        connection = DatabaseConnection(self.db).connect()
+        connection = LocalDatabaseConnection(self.db).connect()
         curs = connection.cursor()
 
         name = self.stdnt_search_line.text()
@@ -314,7 +314,7 @@ class EditDialog(QDialog):
         self.setLayout(layout)
 
     def update_student(self):
-        connection = DatabaseConnection(self.db).connect()
+        connection = LocalDatabaseConnection(self.db).connect()
         curs = connection.cursor()
         curs.execute(
             "UPDATE students SET name = ?, course = ?, mobile = ? WHERE id = ?",
@@ -368,7 +368,7 @@ class DeleteDialog(QDialog):
         student_id = self.mw_table.item(idx, 0).text()
 
         # connection = sqlite3.connect(self.db)
-        connection = DatabaseConnection(self.db).connect()
+        connection = LocalDatabaseConnection(self.db).connect()
         curs = connection.cursor()
         curs.execute(
             "DELETE FROM students WHERE id = ?",
